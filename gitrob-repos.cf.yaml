@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  Namespace:
+    Type: String
+    Default: "gitrob"
+
+  RepoPrefix:
+    Type: String
+    Default: "sn"
+
+Resources:
+  GitRobRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${RepoPrefix}/golden/${Namespace}"
+
+  RunnerRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${RepoPrefix}/${Namespace}-runner"
+
+  ReaderRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${RepoPrefix}/${Namespace}-reader"
+
+Outputs:
+  GitRobRepository:
+    Description: "Repository for GitRob golden image"
+    Value: !GetAtt GitRobRepository.RepositoryUri
+    Export:
+      Name: "GitRobGoldenImageReference"
+
+  RunnerRepository:
+    Description: "Repository for GitRob runner image"
+    Value: !GetAtt RunnerRepository.RepositoryUri
+    Export:
+      Name: "GitRobRunnerImageReference"
+
+  ReaderRepository:
+    Description: "Repository for GitRob reader image"
+    Value: !GetAtt ReaderRepository.RepositoryUri
+    Export:
+      Name: "GitRobReaderImageReference"
+

@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  Namespace:
+    Type: String
+    Default: "gitrob"
+
+Resources:
+  GitRobRunnerVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      CidrBlock: 10.44.25.0/26
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${Namespace}-vpc"
+
+  GitRobRunnerVPCInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${Namespace}-vpc-igw"
+
+  GitRobRunnerIGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref GitRobRunnerVPCInternetGateway
+      VpcId: !Ref GitRobRunnerVPC
+
+  GitRobRunnerPublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: true
+      CidrBlock: 10.44.25.0/28
+      VpcId: !Ref GitRobRunnerVPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${Namespace}-vpc-public-sn-1"
+
+  GitRobRunnerPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref GitRobRunnerVPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${Namespace}-vpc-public-rt"
+
+  GitRobRunnerPublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref GitRobRunnerPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref GitRobRunnerVPCInternetGateway
+
+  GitRobRunnerPublicRouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref GitRobRunnerPublicRouteTable
+      SubnetId: !Ref GitRobRunnerPublicSubnet
+
+Outputs:
+  GitRobRunnerVPC:
+    Description: "A VPC for running Fargate in"
+    Value: !Ref GitRobRunnerVPC
+    Export:
+      Name: GitRobRunnerVPC
+
+
+  GitRobRunnerPublicSubnet:
+    Description: "A public subnet to run gitrob container in"
+    Value: !Ref GitRobRunnerPublicSubnet
+    Export:
+      Name: GitRobPublicSubnet
+

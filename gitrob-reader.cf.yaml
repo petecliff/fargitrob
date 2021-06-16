@@ -1,0 +1,162 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  VPCId:
+    Type: String
+
+  RunnerImageReference:
+    Type: String
+
+  Namespace:
+    Type: String
+    Default: "gitrob"
+
+  GitRobRunnerTaskCpu:
+    Type: String
+    Default: 512
+
+  GitRobRunnerTaskMemory:
+    Type: String
+    Default: 1GB
+
+Resources:
+  GitRobRunnerTaskSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "GitRobRunnerTask SG"
+      VpcId: !Ref VPCId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+
+  GitRobRunnerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "ecs-tasks.amazonaws.com"
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+        - !Ref GitRobRunnerExecutionPolicy
+
+  GitRobRunnerExecutionPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: "Policy for GitRobRunner task"
+      ManagedPolicyName: !Sub "${Namespace}-execution-policy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "gitrobrunner"
+            Effect: "Allow"
+            Action:
+              - "s3:*"
+            Resource:
+              - !GetAtt GitRobOutputBucket.Arn
+              - !Sub "${GitRobOutputBucket.Arn}/*"
+
+  GitRobRunnerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: 
+              Service: "ecs-tasks.amazonaws.com"
+            Action: "sts:AssumeRole"
+          - Effect: Allow
+            Principal:
+              AWS: "482478962702"
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+        - !Ref GitRobRunnerPolicy
+
+  GitRobRunnerPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: "Policy for GitRobRunner task"
+      ManagedPolicyName: !Sub "${Namespace}-task-policy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "gitrobrunner"
+            Effect: "Allow"
+            Action:
+              - "s3:*"
+            Resource:
+              - !GetAtt GitRobOutputBucket.Arn
+              - !Sub "${GitRobOutputBucket.Arn}/*"
+
+  GitRobOutputBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${Namespace}-output-store"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: "AES256"
+      
+  GitRobRunnerTaskLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "${Namespace}-logs"
+      RetentionInDays: 60
+
+  GitRobRunnerECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${Namespace}-cluster"
+      CapacityProviders:
+        - FARGATE
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Weight: 1
+
+  GitRobRunnerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    DependsOn: GitRobRunnerTaskLogGroup
+    Properties:
+      Family: !Sub "${Namespace}-task-family"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref GitRobRunnerTaskCpu
+      Memory: !Ref GitRobRunnerTaskMemory
+      ExecutionRoleArn: !Ref GitRobRunnerExecutionRole
+      TaskRoleArn: !Ref GitRobRunnerRole
+      ContainerDefinitions:
+        - Name: !Ref Namespace
+          Image: !Ref RunnerImageReference
+          Secrets:
+            - Name: "GITROB_GITHUB_ACCESS_TOKEN"
+              ValueFrom: "/gitrob/github_access_token"
+            - Name: "GITHUB_ACCOUNT_NAME"
+              ValueFrom: "/gitrob/github_account_name"
+            - Name: "OUTPUT_BUCKET_NAME"
+              ValueFrom: "/gitrob/s3_bucket_name"
+          LogConfiguration:
+              LogDriver: awslogs
+              Options:
+                awslogs-region: !Ref AWS::Region
+                awslogs-group: !Ref GitRobRunnerTaskLogGroup
+                awslogs-stream-prefix: ecs
+
+
+
+
